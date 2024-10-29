@@ -33,7 +33,14 @@ COL_PENYAKIT: str = "Penyakit"
 
 # print(g1)
 
-# result = filtered_df['Penyakit'].value_counts()
+
+# penyakitItems = df[COL_PENYAKIT]
+
+# print(penyakitItems.items())
+
+# for idx, gv in gangguanSyaraf.items():
+#   match penyakitItems[idx]:
+    
 
 def getEntropy(daftarPenyakit: list[int], jumlahKasus: int, toRound: int = 6) -> float:
   """
@@ -54,43 +61,53 @@ def getEntropy(daftarPenyakit: list[int], jumlahKasus: int, toRound: int = 6) ->
   
   return round(entropyRaw, toRound)
 
-penyakit = df[COL_PENYAKIT]
+def getPenyakitTotal(col: str, penyakit: int, ya: bool = True) -> int:
+  state: int = 1 if ya else 0
+  return df[(df[col] == state) & (df[COL_PENYAKIT] == penyakit)].shape[0]
 
+# def getGain(fields: list[int], total: int, ) -> float:
+
+# ============================================
 ENTROPY_TOTAL: float = 0.0
 PENYAKIT_LIST_TOTAL: list[int] = []
 
-for pk, pv in pk.PENYAKIT.items():
-  jumlahKasusYa: int = df[df[COL_PENYAKIT] == pk].shape[0]
+for idx in pk.PENYAKIT.keys():
+  jumlahKasusYa: int = df[df[COL_PENYAKIT] == idx].shape[0]
   PENYAKIT_LIST_TOTAL.append(jumlahKasusYa)
 
-ENTROPY_TOTAL = getEntropy(PENYAKIT_LIST_TOTAL, df.shape[0], toRound=9)
-print(f"Entropy Total = {ENTROPY_TOTAL}")
-print("-------------------------\n")
+ENTROPY_TOTAL: float  = getEntropy(PENYAKIT_LIST_TOTAL, df.shape[0], toRound=6)
+TOTAL_ROW: int        = df.shape[0]
 
-for gk, gv in gj.GEJALA.items():  
-  gejalaYa: pd.DataFrame    = df[df[gk] == 1]
-  gejalaTidak: pd.DataFrame = df[df[gk] == 0]
+print("+----------------------------+")
+print(f"+ Total Kasus = {TOTAL_ROW}")
+print(f"+ Entropy Total = {ENTROPY_TOTAL}")
+print("+ ---------------------------+\n")
+
+# =======================================================
+
+for gk, gv in gj.GEJALA.items():
+  penyakitListYa: list[int] = [getPenyakitTotal(gk, idx, ya=True) for idx in pk.PENYAKIT.keys()]
+  penyakitListTidak: list[int]  = [getPenyakitTotal(gk, idx, ya=False) for idx in pk.PENYAKIT.keys()]
   
-  jumlahKasusYa: int    = (df[gk] == 1).sum()
-  jumlahKasusTidak: int = (df[gk] == 0).sum()
+  jumlahKasusYa: int    = sum(penyakitListYa)
+  jumlahKasusTidak: int = sum(penyakitListTidak)
   
-  penyakitListYa: list[int]     = []
-  penyakitListTidak: list[int]  = []
+  entropyYa: float    = getEntropy([x for x in penyakitListYa if x != 0], jumlahKasusYa)
+  entropyTidak: float = getEntropy([x for x in penyakitListTidak if x != 0], jumlahKasusTidak)
   
-  for _, v in (gejalaYa[COL_PENYAKIT].value_counts()).items():
-    penyakitListYa.append(v)
-  
-  for _, v in (gejalaTidak[COL_PENYAKIT].value_counts()).items():
-    penyakitListTidak.append(v)
-  
-  entropyYa: float    = getEntropy(penyakitListYa, jumlahKasusYa)
-  entropyTidak: float = getEntropy(penyakitListTidak, jumlahKasusTidak)
+  gain = round(ENTROPY_TOTAL - (
+    ((jumlahKasusYa / TOTAL_ROW) * entropyYa) +
+    ((jumlahKasusTidak / TOTAL_ROW) * entropyTidak)
+  ), 6)
   
   print(f"{gv}")
   print("-------------------------")
-  print(f"Penyakit  (Ya)      = {penyakitListYa}")
-  print(f"Penyakit  (Tidak)   = {penyakitListTidak}")
-  print(f"Entropy   (Ya)      = {entropyYa}")
-  print(f"Entropy   (Tidak)   = {entropyTidak}")
+  print(f"Penyakit      (Ya)    = {penyakitListYa}")
+  print(f"Penyakit      (Tidak) = {penyakitListTidak}")
+  print(f"Jumlah Kasus  (Ya)    = {jumlahKasusYa}")
+  print(f"Jumlah Kasus  (Tidak) = {jumlahKasusTidak}")
+  print(f"Entropy       (Ya)    = {entropyYa}")
+  print(f"Entropy       (Tidak) = {entropyTidak}")
+  print(f"Gain                  = {gain}")
   print("-------------------------\n")
   
