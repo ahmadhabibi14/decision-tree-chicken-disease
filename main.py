@@ -1,3 +1,4 @@
+from typing import Dict
 import pandas as pd
 import datasource.gejala as gj
 import datasource.penyakit as pk
@@ -7,40 +8,23 @@ df: pd.DataFrame = pd.read_csv(
   filepath_or_buffer="penyakit-ayam.csv"
 )
 
-# df.index = df.index + 1
-
-COL_KASUS: str = "Kasus"
-COL_G1: str = "G1"
-COL_G2: str = "G2"
-COL_G3: str = "G3"
-COL_G4: str = "G4"
-COL_G5: str = "G5"
-COL_G6: str = "G6"
-COL_G7: str = "G7"
-COL_G8: str = "G8"
 COL_PENYAKIT: str = "Penyakit"
+# STATE for recursive
+prevEntropyNum: float = 0.0
+prevEntropyName: str  = ""
+curNode: int = 1
 
-# row2: pd.Series = df.iloc[1]
+KeyPenyakitYa: str = "penyakit_ya"
+KeyPenyakitTidak: str = "penyakit_tidak"
+KeyJumlahKasusYa: str = "jml_kasus_ya"
+KeyJumlahKasusTidak: str = "jml_kasus_tidak"
+KeyEntropyYa: str = "entropy_ya"
+KeyEntropyTidak: str = "entropy_tidak"
+KeyGain: str = "gain"
 
-# print(row2[COL_G2])
+RootNode: str = "TOTAL"
 
-# for idx, row in df.iterrows():
-#   print(f"Index: {idx}")
-#   print(row)  # Access each row's data as a Series
-#   print("------") 
-
-# g1 = df[df[COL_G1] == 1]
-
-# print(g1)
-
-
-# penyakitItems = df[COL_PENYAKIT]
-
-# print(penyakitItems.items())
-
-# for idx, gv in gangguanSyaraf.items():
-#   match penyakitItems[idx]:
-    
+AlreadyBeenCalculated: list[str] = [RootNode]
 
 def getEntropy(daftarPenyakit: list[int], jumlahKasus: int, toRound: int = 6) -> float:
   """
@@ -55,7 +39,6 @@ def getEntropy(daftarPenyakit: list[int], jumlahKasus: int, toRound: int = 6) ->
   """
   
   entropyRaw: float = 0.0
-  
   for penyakit in daftarPenyakit:
     entropyRaw += (-penyakit / jumlahKasus * math.log2(penyakit / jumlahKasus))
   
@@ -65,49 +48,99 @@ def getPenyakitTotal(col: str, penyakit: int, ya: bool = True) -> int:
   state: int = 1 if ya else 0
   return df[(df[col] == state) & (df[COL_PENYAKIT] == penyakit)].shape[0]
 
-# def getGain(fields: list[int], total: int, ) -> float:
-
-# ============================================
-ENTROPY_TOTAL: float = 0.0
 PENYAKIT_LIST_TOTAL: list[int] = []
+TOTAL_ROW: int = df.shape[0]
 
 for idx in pk.PENYAKIT.keys():
   jumlahKasusYa: int = df[df[COL_PENYAKIT] == idx].shape[0]
   PENYAKIT_LIST_TOTAL.append(jumlahKasusYa)
 
-ENTROPY_TOTAL: float  = getEntropy(PENYAKIT_LIST_TOTAL, df.shape[0], toRound=6)
-TOTAL_ROW: int        = df.shape[0]
-
-print("+----------------------------+")
-print(f"+ Total Kasus = {TOTAL_ROW}")
-print(f"+ Entropy Total = {ENTROPY_TOTAL}")
-print("+ ---------------------------+\n")
-
-# =======================================================
-
-for gk, gv in gj.GEJALA.items():
-  penyakitListYa: list[int] = [getPenyakitTotal(gk, idx, ya=True) for idx in pk.PENYAKIT.keys()]
-  penyakitListTidak: list[int]  = [getPenyakitTotal(gk, idx, ya=False) for idx in pk.PENYAKIT.keys()]
+def CalculateNode(entropyNum: float, entropyName: str) -> None:
+  global curNode
+  global prevEntropyName
+  global prevEntropyNum
+  global AlreadyBeenCalculated
   
-  jumlahKasusYa: int    = sum(penyakitListYa)
-  jumlahKasusTidak: int = sum(penyakitListTidak)
+  if entropyName == prevEntropyName:
+    return
   
-  entropyYa: float    = getEntropy([x for x in penyakitListYa if x != 0], jumlahKasusYa)
-  entropyTidak: float = getEntropy([x for x in penyakitListTidak if x != 0], jumlahKasusTidak)
+  if entropyNum == 0.0:
+    entropyNum = getEntropy(PENYAKIT_LIST_TOTAL, df.shape[0], toRound=6)
   
-  gain = round(ENTROPY_TOTAL - (
-    ((jumlahKasusYa / TOTAL_ROW) * entropyYa) +
-    ((jumlahKasusTidak / TOTAL_ROW) * entropyTidak)
-  ), 6)
+  nodeDict: Dict[str, Dict[str, any]] = {
+    entropyName: {
+      KeyPenyakitYa: [],
+      KeyPenyakitTidak: [],
+      KeyJumlahKasusYa: 0,
+      KeyJumlahKasusTidak: 0,
+      KeyEntropyYa: entropyNum,
+      KeyEntropyTidak: 0.0,
+      KeyGain: 0.0
+    }
+  }
   
-  print(f"{gv}")
-  print("-------------------------")
-  print(f"Penyakit      (Ya)    = {penyakitListYa}")
-  print(f"Penyakit      (Tidak) = {penyakitListTidak}")
-  print(f"Jumlah Kasus  (Ya)    = {jumlahKasusYa}")
-  print(f"Jumlah Kasus  (Tidak) = {jumlahKasusTidak}")
-  print(f"Entropy       (Ya)    = {entropyYa}")
-  print(f"Entropy       (Tidak) = {entropyTidak}")
-  print(f"Gain                  = {gain}")
+  for gk, gv in gj.GEJALA.items():
+    if gv in AlreadyBeenCalculated:
+      continue
+    
+    penyakitListYa: list[int] = [getPenyakitTotal(gk, idx, ya=True) for idx in pk.PENYAKIT.keys()]
+    penyakitListTidak: list[int]  = [getPenyakitTotal(gk, idx, ya=False) for idx in pk.PENYAKIT.keys()]
+    
+    jumlahKasusYa: int    = sum(penyakitListYa)
+    jumlahKasusTidak: int = sum(penyakitListTidak)
+    
+    entropyYa: float    = getEntropy([x for x in penyakitListYa if x != 0], jumlahKasusYa)
+    entropyTidak: float = getEntropy([x for x in penyakitListTidak if x != 0], jumlahKasusTidak)
+    
+    gain = round(entropyNum - (
+      ((jumlahKasusYa / TOTAL_ROW) * entropyYa) +
+      ((jumlahKasusTidak / TOTAL_ROW) * entropyTidak)
+    ), 6)
+    
+    nodeDict[gv] = {
+      KeyPenyakitYa: penyakitListYa,
+      KeyPenyakitTidak: penyakitListTidak,
+      KeyJumlahKasusYa: jumlahKasusYa,
+      KeyJumlahKasusTidak: jumlahKasusTidak,
+      KeyEntropyYa: entropyYa,
+      KeyEntropyTidak: entropyTidak,
+      KeyGain: gain
+    }
+    
+    print(f"{gv}")
+    print("-------------------------")
+    if curNode == 1:
+      print(f"Penyakit      (Ya)    = {penyakitListYa}")
+      print(f"Penyakit      (Tidak) = {penyakitListTidak}")
+      print(f"Jumlah Kasus  (Ya)    = {jumlahKasusYa}")
+      print(f"Jumlah Kasus  (Tidak) = {jumlahKasusTidak}")
+    print(f"Entropy       (Ya)    = {entropyYa}")
+    print(f"Entropy       (Tidak) = {entropyTidak}")
+    print(f"Gain                  = {gain}")
+    print("-------------------------\n")
+  
+  entropyThatHasMaxGain: float | int = max(
+    nodeDict, key=lambda k: nodeDict[k][KeyGain]
+  )
+  
+  newRootNodeObject: Dict[str, any] = nodeDict[entropyThatHasMaxGain]
+  newEntropyNumObtained: float | int = (
+    newRootNodeObject[KeyEntropyYa]
+    if newRootNodeObject[KeyEntropyYa] > newRootNodeObject[KeyEntropyTidak]
+    else newRootNodeObject[KeyEntropyTidak]
+  )
+  
+  print(f"[ Node {curNode} ] Entropy {entropyName} = {entropyNum}")
+  print(f"[ Node {curNode} ] Gain terbesar didapatkan dari \"{entropyThatHasMaxGain}\" = {newRootNodeObject[KeyGain]}")
   print("-------------------------\n")
   
+  prevEntropyName = entropyName
+  prevEntropyNum = entropyNum
+  
+  curNode += 1
+  
+  AlreadyBeenCalculated.append(entropyThatHasMaxGain)
+  
+  CalculateNode(newEntropyNumObtained, entropyThatHasMaxGain)
+
+CalculateNode(0.0, RootNode)
